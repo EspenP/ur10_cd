@@ -6,5 +6,6 @@ model_path="~/.gazebo/models/"
 
 cp -r launch/* launch_path && echo "Copied launch files"
 (cp -r worlds/* world_path && echo "Copied world files") || echo "PLEASE RUN THIS AS ROOT"
+mkdir -p model_path
 cp -r models/* model_path && echo "Copied model files"
 echo "DONE"
