@@ -7,7 +7,7 @@ material vrc/poster
 		{
 			texture_unit
 			{
-				texture smudge.png
+				texture star.png
 				filtering anistropic
 				max_anisotropy 16
 				scale 1 1

@@ -9,7 +9,6 @@
     <arg name="world_name" default="worlds/connect_dots.world"/>
     <arg name="paused" value="$(arg paused)"/>
     <arg name="gui" value="$(arg gui)"/>
-    <arg name="verbose" value="$(arg verbose)"/>
   </include>
 
   <!-- send robot urdf to param server -->
