@@ -4,7 +4,7 @@ from __future__ import division
 import cv2
 import numpy as np
 import rospy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from std_msgs.msg import Header
 from cv_bridge import CvBridge, CvBridgeError
@@ -30,7 +30,6 @@ def find_poster(im):
     
     cv2.imshow('Cropped', im_cropped) # Shows image after cropping
     cv2.waitKey(0) # Wait until enter is pressed in window
-
     return im_cropped, xy_min, xy_max
 
 def draw_lines(im):
@@ -81,17 +80,17 @@ def convert_point(points, xy_min, xy_max):
     x_pixels = xy_max[0][0] - xy_min[0][0]
     y_pixels = xy_max[0][1] - xy_min[0][1]
 
-    x_length = x_pixels / poster_width # This will convert the # of pixels to # of pixels per meter
-    y_length = y_pixels / poster_height # change the value of '1' to match the 
+    x_length = poster_width / x_pixels # This will convert the # of pixels to # of pixels per meter
+    y_length = poster_height / y_pixels # change the value of '1' to match the 
 
     x_center = x_pixels / 2 # find horizontal center point of poster 
     y_center = y_pixels / 2 # find vertical center of poster
-
+    
     # print points
     for k in range(len(points)):
         if (k<len(points)):
-            x_points.append((points[k][0] - x_center)/x_length) # X pixels are left to right, treat center as "0" and find distance relative to "0", left being negative right being positive
-            y_points.append((y_center - points[k][0])/y_length) # Y pixels are top to bottom, treat center as "0" and find distance relative to "0", down being negative up being positive
+            x_points.append((x_center - points[k][0]) * x_length) # X pixels are left to right, treat center as "0" and find distance relative to "0", left being negative right being positive
+            y_points.append((y_center - points[k][1]) * y_length) # Y pixels are top to bottom, treat center as "0" and find distance relative to "0", down being negative up being positive
         # print("Point {}: {}".format(k, x_points[k]))
     return x_points, y_points
 
@@ -100,7 +99,7 @@ def move_arm(x_points, y_points):
     rate = rospy.Rate(1)
     
     Tmsg = JointTrajectory()
-    Tmsg.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
+    Tmsg.joint_names = ['shoulder_pan_joint','shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
     Tmsg.header.stamp = rospy.Time.now()
 
     Tpointmsg = JointTrajectoryPoint()
@@ -109,36 +108,68 @@ def move_arm(x_points, y_points):
 
     for k in range(len(points)):
         if (k<len(points)):
-            desired_solution = [np.pi,-np.pi/2,-np.pi/2,0,0,np.pi/2]
-            # target_pose = [-x_points[k],-1.4, y_points[k]+0.8, 1,1,1]
-            target_pose = [0, 1.4, 0.8, 1,1,1]
+            # desired_solution = [np.pi,-np.pi/2,-np.pi/2,-np.pi/2, 0, 0]
+            desired_solution = [0,0,0,-np.pi/2, 0, 0]
+            target_pose = [x_points[k],0.5, y_points[k]+0.8, -np.pi/2, 0, 0]
+            # target_pose = [0, 0.5, 0.8, -np.pi/2, 0, 0]
             Tmsg.header.stamp = rospy.Time.now()
             Tpointmsg.positions = inv_kin(target_pose, desired_solution)
-            print inv_kin(target_pose, desired_solution)
+            # print inv_kin(target_pose, desired_solution)
+            for i in range(len(Tpointmsg.positions)):
+                # print Tpointmsg.positions[i]
+                while (abs(Tpointmsg.positions[i]) >= np.pi):
+                    # print Tpointmsg.positions[i]
+                    if Tpointmsg.positions[i] < -np.pi:
+                        # print "<"
+                        Tpointmsg.positions[i] = np.pi
+                    elif Tpointmsg.positions[i] > np.pi:
+                        # print ">"
+                        Tpointmsg.positions[i] =- np.pi
+                    elif abs(Tpointmsg.positions[i]) == np.pi:
+                        # print "="
+                        Tpointmsg.positions[i] = 0
+            # print Tpointmsg.positions
+            Tpointmsg.positions = [round(num, 1) for num in Tpointmsg.positions]
             Tmsg.points = [Tpointmsg]
-            # print "publishing"
             pub.publish(Tmsg)
-            rate.sleep()
+
+            # print "publishing"
+            joint_states = rospy.wait_for_message("joint_states", JointState)
+            joint_states.position = [round(num, 2) for num in joint_states.position]
+            joint_states.position[0], joint_states.position[2] = joint_states.position[2], joint_states.position[0]
+            while (joint_states.position != Tpointmsg.positions):
+                # print joint_states.position
+                # print Tpointmsg.positions
+                Tmsg.header.stamp = rospy.Time.now()
+                joint_states = rospy.wait_for_message("joint_states", JointState)
+                joint_states.position = [round(num, 2) for num in joint_states.position]
+                joint_states.position[0], joint_states.position[2] = joint_states.position[2], joint_states.position[0]
+            rospy.sleep(0.5)
 
 def go_home():
-    for i in range(10):
-        pub = rospy.Publisher('/arm_controller/command', JointTrajectory, queue_size=10)
-        rate = rospy.Rate(25)
-        
-        Tmsg = JointTrajectory()
-        # Tmsg.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
-        Tmsg.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
-        Tmsg.header.stamp = rospy.Time.now()
+    pub = rospy.Publisher('/arm_controller/command', JointTrajectory, queue_size=10)
+    rate = rospy.Rate(25)
+    
+    Tmsg = JointTrajectory()
+    # Tmsg.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
+    Tmsg.joint_names = ['shoulder_pan_joint', 'shoulder_lift_joint','elbow_joint','wrist_1_joint','wrist_2_joint', 'wrist_3_joint']
+    Tmsg.header.stamp = rospy.Time.now()
 
-        Tpointmsg = JointTrajectoryPoint()
-        Tpointmsg.velocities = [0,0,0,0,0,0]
-        Tpointmsg.time_from_start = rospy.Duration(0.5)
+    Tpointmsg = JointTrajectoryPoint()
+    Tpointmsg.velocities = [0,0,0,0,0,0]
+    Tpointmsg.time_from_start = rospy.Duration(0.5)
 
-        Tpointmsg.positions = [-np.pi/2,-np.pi/2,np.pi/2,0,0,0]
-        Tmsg.points = [Tpointmsg]
-        # print "publishing"
+    Tpointmsg.positions = [-np.pi/2,-np.pi/2,np.pi/2,0,0,0]
+    Tmsg.points = [Tpointmsg]
+    # print "publishing"
+    joint_states = rospy.wait_for_message("joint_states", JointState)
+    joint_states.position = [round(num, 3) for num in joint_states.position]
+    while (joint_states.position[0:3] != [round(np.pi/2,3),round(-np.pi/2,3),round(-np.pi/2,3)]):
+        # print joint_states.position[0:3]
         pub.publish(Tmsg)
-        rate.sleep()
+        joint_states = rospy.wait_for_message("joint_states", JointState)
+        joint_states.position = [round(num, 3) for num in joint_states.position]
+    rospy.sleep(1)
 
 class ros_to_cv2:
     rx_flag = False
@@ -153,13 +184,15 @@ class ros_to_cv2:
             rospy.logerr("CvBridge Error: {0}".format(e))
 
 if __name__ == '__main__':
-    rospy.init_node('image_disp_feed', anonymous=True, disable_signals=True)
+    rospy.init_node('cd_node', anonymous=True, disable_signals=True)
     rate = rospy.Rate(1) # Check for new data at 1 Hz
     processor = ros_to_cv2()
     sub_image = rospy.Subscriber("/ur10/camera1/image_raw", Image, processor.callback)
     display_only = False
     final_img = None
+    
     go_home()
+
     while not rospy.is_shutdown():
         # print("LOOPING")
         if processor.rx_flag and not display_only:
