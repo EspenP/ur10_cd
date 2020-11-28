@@ -314,7 +314,13 @@ def inv_kin(p, q_d, i_unit='r', o_unit='r'):
             theta[i, 2] = -cmath.acos((np.linalg.norm(P_13) ** 2 - a2 ** 2 - a3 ** 2) / (2 * a2 * a3)).real
             theta[i+1, 2] = -theta[i, 2]
         # theta2
-        theta[i, 1] = -atan2(P_13[1], -P_13[0]) + asin(a3 * sin(theta[i, 2]) / np.linalg.norm(P_13))
+        asin_arg = a3 * sin(theta[i, 2]) / np.linalg.norm(P_13)
+        if abs(asin_arg) > 1:
+            if asin_arg < -1:
+                asin_arg = -1
+            elif asin_arg > 1:
+                asin_arg = 1
+        theta[i, 1] = -atan2(P_13[1], -P_13[0]) + asin(asin_arg)
         # theta4
         T_13 = HTM(1, theta[i]) * HTM(2, theta[i])
         T_34 = np.linalg.inv(T_13) * T_14

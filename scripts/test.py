@@ -27,10 +27,13 @@ def find_poster(im):
     # print xy_min, xy_max
 
     im_cropped = im[xy_min[0][1]:xy_max[0][1], xy_min[0][0]:xy_max[0][0]] # This crops the image [y_min:y_max, x_min:x_max]
+
+    # Flip image
+    im_flipped = cv2.flip(im_cropped, 1)
     
     cv2.imshow('Cropped', im_cropped) # Shows image after cropping
     cv2.waitKey(0) # Wait until enter is pressed in window
-    return im_cropped, xy_min, xy_max
+    return im_flipped, xy_min, xy_max
 
 def draw_lines(im):
     points = []
@@ -95,7 +98,7 @@ def convert_point(points, xy_min, xy_max):
     return x_points, y_points
 
 def move_arm(x_points, y_points):
-    pub = rospy.Publisher('/arm_controller/command', JointTrajectory, queue_size=10)
+    pub = rospy.Publisher('/arm_controller/command', JointTrajectory, queue_size=50)
     rate = rospy.Rate(1)
     
     Tmsg = JointTrajectory()
@@ -105,6 +108,7 @@ def move_arm(x_points, y_points):
     Tpointmsg = JointTrajectoryPoint()
     Tpointmsg.velocities = [0,0,0,0,0,0]
     Tpointmsg.time_from_start = rospy.Duration(0.5)
+    print("NUMBER OF POINTS: ", len(points))
 
     for k in range(len(points)):
         if (k<len(points)):
@@ -113,6 +117,7 @@ def move_arm(x_points, y_points):
             target_pose = [x_points[k],0.5, y_points[k]+0.8, -np.pi/2, 0, 0]
             # target_pose = [0, 0.5, 0.8, -np.pi/2, 0, 0]
             Tmsg.header.stamp = rospy.Time.now()
+            print("TARGET POSE", target_pose)
             Tpointmsg.positions = inv_kin(target_pose, desired_solution)
             # print inv_kin(target_pose, desired_solution)
             for i in range(len(Tpointmsg.positions)):
