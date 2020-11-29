@@ -29,15 +29,14 @@ def find_poster(im):
     im_cropped = im[xy_min[0][1]:xy_max[0][1], xy_min[0][0]:xy_max[0][0]] # This crops the image [y_min:y_max, x_min:x_max]
 
     # Flip image
-    im_flipped = cv2.flip(im_cropped, 1)
+    # im_flipped = cv2.flip(im_cropped, 1)
     
     cv2.imshow('Cropped', im_cropped) # Shows image after cropping
     cv2.waitKey(0) # Wait until enter is pressed in window
-    return im_flipped, xy_min, xy_max
+    return im_cropped, xy_min, xy_max
 
 def draw_lines(im):
     points = []
-
     # im = cv2.imread("car.jpg")
     gray = cv2.cvtColor(im,cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -83,17 +82,18 @@ def convert_point(points, xy_min, xy_max):
     x_pixels = xy_max[0][0] - xy_min[0][0]
     y_pixels = xy_max[0][1] - xy_min[0][1]
 
-    x_length = poster_width / x_pixels # This will convert the # of pixels to # of pixels per meter
+    x_length = poster_width / x_pixels # This will convert the # of pixels to meters per pixel
     y_length = poster_height / y_pixels # change the value of '1' to match the 
 
     x_center = x_pixels / 2 # find horizontal center point of poster 
     y_center = y_pixels / 2 # find vertical center of poster
     
+    y_offset = -0.1 # Vertical offset compensator (meters)
     # print points
     for k in range(len(points)):
         if (k<len(points)):
-            x_points.append((x_center - points[k][0]) * x_length) # X pixels are left to right, treat center as "0" and find distance relative to "0", left being negative right being positive
-            y_points.append((y_center - points[k][1]) * y_length) # Y pixels are top to bottom, treat center as "0" and find distance relative to "0", down being negative up being positive
+            x_points.append((x_center - points[k][0]) * -x_length) # X pixels are left to right, treat center as "0" and find distance relative to "0", left being negative right being positive
+            y_points.append((y_center - points[k][1]) * y_length + y_offset) # Y pixels are top to bottom, treat center as "0" and find distance relative to "0", down being negative up being positive
         # print("Point {}: {}".format(k, x_points[k]))
     return x_points, y_points
 
